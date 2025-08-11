@@ -1,0 +1,38 @@
+name: Build RPM
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  schedule:
+    - cron: '0 0 * * 0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [fedora-40, rhel-9, opensuse-leap]
+        arch: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Determine latest Volta
+        run: |
+          ./scripts/get-latest-volta.sh > latest.txt || echo 'v0.0.0' > latest.txt
+          cat latest.txt
+      - name: Update spec version
+        run: |
+          VERSION=$(cat latest.txt | tr -d 'v')
+          ./scripts/update-spec-version.sh "$VERSION"
+      - name: Build RPM
+        run: |
+          ./scripts/build-rpm.sh --distro ${matrix.distro} --arch ${matrix.arch} --mode source
+      - name: Test RPM
+        run: |
+          ./scripts/test-in-container.sh dist/${{ matrix.distro }}/${{ matrix.arch }}/volta-*.rpm
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: volta-${{ matrix.distro }}-${{ matrix.arch }}
+          path: dist/${{ matrix.distro }}/${{ matrix.arch }}/*.rpm
